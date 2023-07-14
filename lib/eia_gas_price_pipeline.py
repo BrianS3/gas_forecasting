@@ -5,6 +5,11 @@ import pymysql
 from sqlalchemy import create_engine
 import pandas as pd
 from lib.load_creds import load_env_credentials
+from datetime import datetime
+
+current_date = datetime.now().date()
+file = open(f'../logs/run_log_{current_date}.txt', 'w+')
+file.close()
 
 load_env_credentials()
 
@@ -23,6 +28,15 @@ connection = pymysql.connect(
 
 engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}/{database}")
 
+query = """
+select 
+distinct padd, 
+max(period) as max_period 
+from gas_prices group by padd
+"""
+max_dates = pd.read_sql(query, engine)
+max_dates_dict = dict(zip(max_dates['padd'], max_dates['max_period']))
+
 padds = {
     "PADD 1": "PET.EMM_EPM0_PTE_R10_DPG.W", #east coast
     "PADD 2": "PET.EMM_EPM0_PTE_R20_DPG.W", #midwest
@@ -35,7 +49,7 @@ for key, value in padds.items():
     series_id = padds[key]
     url = f"https://api.eia.gov/v2/seriesid/{series_id}?api_key={api_key}"
 
-    with open(f"../logs/initial_loading.txt", "a") as file:
+    with open(f"../logs/run_log_{current_date}.txt", "a") as file:
         response = requests.get(url)
         if response.status_code == 200:
             file.write(f"Request successful: {series_id}\n")
@@ -47,16 +61,22 @@ for key, value in padds.items():
 
     df = df[["area-name", "duoarea", "period", "product", "product-name", "series-description", "value", "units"]]
     df = df.rename(columns = {"area-name":"padd",
-            "product-name":"product_name",
-            "series-description":"series_description",
-            "value":"price"})
+                              "product-name":"product_name",
+                              "series-description":"series_description",
+                              "value":"price"})
 
-    df.to_sql(name = 'gas_prices',
-              con=engine,
-              if_exists='append',
-              index=False)
+    max_date_check = max_dates_dict[key]
+    df['period'] = pd.to_datetime(df['period'])
+    df = df[df['period']>pd.to_datetime(max_date_check)]
 
-    with open(f"../logs/initial_loading.txt", "a") as file:
-        file.write(f'{series_id}: write successful\n')
+    if len(df) > 0 :
+        df.to_sql(name = 'gas_prices',
+                  con=engine,
+                  if_exists='append',
+                  index=False)
 
-
+        with open(f"../logs/run_log_{current_date}.txt", "a") as file:
+            file.write(f'{series_id}: write successful\n')
+    else:
+        with open(f"../logs/run_log_{current_date}.txt", "a") as file:
+            file.write(f'{series_id}: No Data\n')
