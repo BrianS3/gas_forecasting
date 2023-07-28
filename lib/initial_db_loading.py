@@ -1,27 +1,15 @@
 import requests
 import json
 import os
-import pymysql
-from sqlalchemy import create_engine
+import sqlite3
 import pandas as pd
-from lib.load_creds import load_env_credentials
+from load_creds import load_env_credentials
 
 load_env_credentials()
-
 api_key = os.getenv('eia_api_key')
-host = os.getenv('database_host')
-user = os.getenv('user')
-password = os.getenv('pass')
-database = os.getenv('database')
 
-connection = pymysql.connect(
-    host = host,
-    user = user,
-    password = password,
-    database = database
-)
-
-engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}/{database}")
+db_file = os.path.join('database', 'gas_data.db')
+connection = sqlite3.connect(db_file)
 
 padds = {
     "PADD 1": "PET.EMM_EPM0_PTE_R10_DPG.W", #east coast
@@ -35,7 +23,7 @@ for key, value in padds.items():
     series_id = padds[key]
     url = f"https://api.eia.gov/v2/seriesid/{series_id}?api_key={api_key}"
 
-    with open(f"../logs/initial_loading.txt", "a") as file:
+    with open(f"logs/initial_loading.txt", "a") as file:
         response = requests.get(url)
         if response.status_code == 200:
             file.write(f"Request successful: {series_id}\n")
@@ -52,11 +40,12 @@ for key, value in padds.items():
             "value":"price"})
 
     df.to_sql(name = 'gas_prices',
-              con=engine,
+              con=connection,
               if_exists='append',
               index=False)
 
-    with open(f"../logs/initial_loading.txt", "a") as file:
+    with open(f"logs/initial_loading.txt", "a") as file:
         file.write(f'{series_id}: write successful\n')
 
-
+connection.commit()
+connection.close()
