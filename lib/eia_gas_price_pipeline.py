@@ -1,32 +1,21 @@
 import requests
 import json
 import os
-import pymysql
-from sqlalchemy import create_engine
+import sqlite3
 import pandas as pd
-from lib.load_creds import load_env_credentials
+from load_creds import load_env_credentials
 from datetime import datetime
 
 current_date = datetime.now().date()
-file = open(f'../logs/run_log_{current_date}.txt', 'w+')
+file = open(f'logs/run_log_{current_date}.txt', 'w+')
 file.close()
 
 load_env_credentials()
 
 api_key = os.getenv('eia_api_key')
-host = os.getenv('database_host')
-user = os.getenv('user')
-password = os.getenv('pass')
-database = os.getenv('database')
 
-connection = pymysql.connect(
-    host = host,
-    user = user,
-    password = password,
-    database = database
-)
-
-engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}/{database}")
+db_file = os.path.join('database', 'gas_data.db')
+connection = sqlite3.connect(db_file)
 
 query = """
 select 
@@ -34,7 +23,7 @@ distinct padd,
 max(period) as max_period 
 from gas_prices group by padd
 """
-max_dates = pd.read_sql(query, engine)
+max_dates = pd.read_sql(query, connection)
 max_dates_dict = dict(zip(max_dates['padd'], max_dates['max_period']))
 
 padds = {
@@ -49,7 +38,7 @@ for key, value in padds.items():
     series_id = padds[key]
     url = f"https://api.eia.gov/v2/seriesid/{series_id}?api_key={api_key}"
 
-    with open(f"../logs/run_log_{current_date}.txt", "a") as file:
+    with open(f"logs/run_log_{current_date}.txt", "a") as file:
         response = requests.get(url)
         if response.status_code == 200:
             file.write(f"Request successful: {series_id}\n")
@@ -75,8 +64,11 @@ for key, value in padds.items():
                   if_exists='append',
                   index=False)
 
-        with open(f"../logs/run_log_{current_date}.txt", "a") as file:
+        with open(f"logs/run_log_{current_date}.txt", "a") as file:
             file.write(f'{series_id}: write successful\n')
     else:
-        with open(f"../logs/run_log_{current_date}.txt", "a") as file:
+        with open(f"logs/run_log_{current_date}.txt", "a") as file:
             file.write(f'{series_id}: No Data\n')
+
+connection.commit()
+connection.close()
