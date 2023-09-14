@@ -7,14 +7,19 @@ from load_creds import load_env_credentials
 from datetime import datetime
 
 current_date = datetime.now().date()
-file = open(f'logs/run_log_{current_date}.txt', 'w+')
+
+root = os.path.abspath('..')
+
+filepath = os.path.join(root, f'logs\\run_log_{current_date}.txt')
+
+file = open(filepath, 'w+')
 file.close()
 
 load_env_credentials()
 
 api_key = os.getenv('eia_api_key')
 
-db_file = os.path.join('database', 'gas_data.db')
+db_file = os.path.join(root, 'database\\gas_data.db')
 connection = sqlite3.connect(db_file)
 
 query = """
@@ -38,7 +43,7 @@ for key, value in padds.items():
     series_id = padds[key]
     url = f"https://api.eia.gov/v2/seriesid/{series_id}?api_key={api_key}"
 
-    with open(f"logs/run_log_{current_date}.txt", "a") as file:
+    with open(filepath, "a") as file:
         response = requests.get(url)
         if response.status_code == 200:
             file.write(f"Request successful: {series_id}\n")
@@ -53,21 +58,22 @@ for key, value in padds.items():
                               "product-name":"product_name",
                               "series-description":"series_description",
                               "value":"price"})
-
+    
     max_date_check = max_dates_dict[key]
     df['period'] = pd.to_datetime(df['period'])
     df = df[df['period']>pd.to_datetime(max_date_check)]
+    df['period'] = pd.to_datetime(df['period']).dt.date
 
     if len(df) > 0 :
         df.to_sql(name = 'gas_prices',
-                  con=engine,
+                  con=connection,
                   if_exists='append',
                   index=False)
 
-        with open(f"logs/run_log_{current_date}.txt", "a") as file:
+        with open(filepath, "a") as file:
             file.write(f'{series_id}: write successful\n')
     else:
-        with open(f"logs/run_log_{current_date}.txt", "a") as file:
+        with open(filepath, "a") as file:
             file.write(f'{series_id}: No Data\n')
 
 connection.commit()
