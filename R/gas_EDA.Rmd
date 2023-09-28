@@ -1,0 +1,48 @@
+---
+title: "Gas Forecasting Exploratory Data Analysis"
+author: "Brian Seko"
+date: "2023-09-27"
+output: html_document
+params:
+  db_file: "/database/gas_data.db"
+---
+
+```{r setup, include=FALSE}
+library(DBI)
+library(RSQLite)
+library(tidyverse)
+library(here)
+library(lubridate)
+library(ggplot2)
+```
+
+```{r, connect to gas forecasting database}
+con <- dbConnect(RSQLite::SQLite(), paste0(here(),params$db_file))
+gas_raw <- dbGetQuery(con, "select * from gas_prices")
+```
+
+```{r, Describe Average by Month}
+gas_monthly_average <- gas_raw %>% 
+  mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
+  group_by(period_month, padd) %>% 
+  summarise(monthly_average = round(mean(price),2), .groups = "drop") %>% 
+  mutate(
+    padd_descrip = case_when(
+      padd=="PADD 1" ~"East Coast",
+      padd=="PADD 2" ~"Midwest", 
+      padd=="PADD 3" ~"Gulf Coast",
+      padd=="PADD 4" ~"Rocky Mountain",
+      TRUE ~"West Coast"),
+  ) %>% select(-padd)
+
+gas_national_average <- gas_raw %>% 
+  mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
+  group_by(period_month) %>% 
+  summarise(monthly_average = round(mean(price),2), .groups = "drop") %>% 
+  mutate(padd_descrip="National")
+
+gas_monthly_average_w_national <- rbind(gas_monthly_average,gas_national_average)
+  
+```
+
+
