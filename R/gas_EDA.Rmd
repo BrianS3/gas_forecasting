@@ -9,7 +9,7 @@ params:
 
 ```{r setup, include=FALSE}
 library(DBI)
-library(RSQLite)
+library(RSQLite) 
 library(tidyverse)
 library(here)
 library(lubridate)
@@ -18,6 +18,8 @@ library(TSstudio)
 library(plotly)
 
 knitr::opts_chunk$set(echo = FALSE, fig.show='asis')
+
+current_month = month(today())
 ```
 
 ```{r, connect to gas forecasting database}
@@ -32,6 +34,7 @@ We'll start with a very simple trend analysis. Let's take the average price by m
 ```{r, Describe Average by Month}
 gas_monthly_average <- gas_raw %>% 
   mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
+  filter(month(period_month) < current_month) %>% 
   group_by(period_month, padd) %>% 
   summarise(monthly_average = round(mean(price),2), .groups = "drop") %>% 
   mutate(
@@ -45,9 +48,10 @@ gas_monthly_average <- gas_raw %>%
 
 gas_national_average <- gas_raw %>% 
   mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
+  filter(month(period_month) < current_month) %>% 
   group_by(period_month) %>% 
   summarise(monthly_average = round(mean(price),2), .groups = "drop") %>% 
-  mutate(padd_descrip="National")
+  mutate(padd_descrip="National (All Regions)")
 
 gas_monthly_average_w_national <- rbind(gas_monthly_average,gas_national_average)
 ```
