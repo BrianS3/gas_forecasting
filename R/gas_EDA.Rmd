@@ -1,5 +1,5 @@
 ---
-title: "Gas Price Exploratory Data Analysis"
+title: "Gas Price Tracker"
 author: "Author: Brian Seko"
 date: "Last Updated: `r format(Sys.Date(), '%B %d, %Y')`"
 output: html_document
