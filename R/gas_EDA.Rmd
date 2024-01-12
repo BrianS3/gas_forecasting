@@ -100,7 +100,7 @@ gas_over_time_plot_recent <- ggplot(data = trend_recent_years, aes(x = period_mo
   scale_x_date(date_breaks = "6 months", date_labels="%m/%y")+
   scale_y_continuous(breaks = seq(0,ceiling(max(trend_recent_years$monthly_average)), by = 1),
                      limits = c(0, NA)) +
-  labs(y="Dollars", x="", color = "", title="Average Gas Price per Month: 2020-YTD")+
+  labs(y="Dollars", x="", color = "", title="National Average Gas Price per Month: 2020-YTD")+
   theme(text = element_text(size = 14), # Set all text size to 14
         axis.title = element_text(size = 14), # Set axis titles size to 14
         axis.text = element_text(size = 14), # Set axis text size to 14
@@ -126,7 +126,7 @@ gas_over_time_plot_recent_weeks <- ggplot(data = trend_data_weeks, aes(x = as.Da
   scale_x_date(date_breaks = "1 months", date_labels="%m/%y")+
   scale_y_continuous(breaks = seq(0,ceiling(max(trend_recent_years$monthly_average)), by = 1),
                      limits = c(0, NA)) +
-  labs(y="Dollars", x="", color = "Region", title="Average Gas Price: Past 6 Months")+
+  labs(y="Dollars", x="", color = "", title="National Average Gas Price: Past 6 Months")+
   theme(text = element_text(size = 14), # Set all text size to 14
         axis.title = element_text(size = 14), # Set axis titles size to 14
         axis.text = element_text(size = 14), # Set axis text size to 14
