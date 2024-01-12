@@ -1,7 +1,7 @@
 ---
 title: "Gas Price Exploratory Data Analysis"
 author: "Author: Brian Seko"
-date: "Last Update: 2023-12-18"
+date: "Last Updated: `r format(Sys.Date(), '%B %d, %Y')`"
 output: html_document
 params:
   db_file: "/database/gas_data.db"
@@ -27,6 +27,7 @@ library(lubridate)
 library(ggplot2)
 library(TSstudio)
 library(plotly)
+library(stargazer)
 
 knitr::opts_chunk$set(echo = FALSE, fig.show='asis')
 
@@ -57,7 +58,7 @@ gas_monthly_average <- gas_raw %>%
 
 gas_national_average <- gas_raw %>% 
   mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
-  filter(month(period_month) < current_month) %>% 
+  filter(as.Date(period_month) < first_day_of_current_month) %>% 
   group_by(period_month) %>% 
   summarise(monthly_average = round(mean(price),2), .groups = "drop") %>% 
   mutate(padd_descrip="National (All Regions)")
@@ -80,7 +81,7 @@ ggplotly(gas_over_time_plot)
 ```{r Average Gas Price per Month Plot Recent Year Focus, fig.width=13, fig.height=6}
 yearly_average <- gas_raw %>% 
   mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
-  filter(month(period_month) < current_month) %>% 
+  filter(as.Date(period_month) < first_day_of_current_month) %>% 
   group_by(year) %>% 
   summarise(yearly_average = round(mean(price),2), .groups = "drop")
 
@@ -89,7 +90,7 @@ trend_recent_years <- gas_monthly_average_w_national %>%
   mutate(year = year(period_month)) %>% 
   left_join(yearly_average, by="year")
 
-gas_over_time_plot_recent <- ggplot(data = trend_recent_years, aes(x = as.Date(period_month), y=monthly_average))+
+gas_over_time_plot_recent <- ggplot(data = trend_recent_years, aes(x = period_month, y=monthly_average))+
   geom_line(aes(color = "Monthly Average"), linewidth=0.75)+
   geom_line(aes(y=yearly_average, color="Yearly Average"), linewidth=0.75)+
   geom_vline(xintercept = as.Date("2021-01-01"), linetype = "dashed", color = "blue") +
@@ -150,18 +151,3 @@ price_dist_plot <- ggplot(dist_plot_data, aes(x = monthly_average, fill = as.fac
 
 ggplotly(price_dist_plot)#, width = 1000, height = 500)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
