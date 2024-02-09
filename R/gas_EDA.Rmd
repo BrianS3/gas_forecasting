@@ -7,6 +7,8 @@ params:
   db_file: "/database/gas_data.db"
 ---
 
+[See the Code](https://github.com/BrianS3/gas_forecasting/tree/main/R)
+
 <style>
 body {
   text-align: left;
@@ -83,7 +85,7 @@ gas_over_time_plot <- ggplot(data = gas_monthly_average_w_national, aes(x = peri
 ggplotly(gas_over_time_plot)
 ```
 
-```{r Average Gas Price per Month Plot: Last 6 Months, fig.width=13, fig.height=6}
+```{r Average Gas Price per Month Plot: Last 6 Months, fig.width=10, fig.height=6}
 date_filter <- Sys.Date() %m-% months(6)
 
 gas_over_time_plot <- ggplot(data = gas_monthly_average_w_national %>% 
@@ -98,7 +100,7 @@ gas_over_time_plot <- ggplot(data = gas_monthly_average_w_national %>%
 ggplotly(gas_over_time_plot)
 ```
 
-```{r Average Gas Price, Last Month by Year, fig.width=13, fig.height=6}
+```{r Average Gas Price, Last Month by Year, fig.width=10, fig.height=6}
 last_month <- current_month-1
 last_month_name <- format(Sys.Date() %m-% months(1), '%B')
 
@@ -116,7 +118,7 @@ ggplotly(gas_month_comparison_plot)
 ```
 
 
-```{r Average Gas Price per Month Plot Recent Year Focus, fig.width=13, fig.height=6}
+```{r Average Gas Price per Month Plot Recent Year Focus, fig.width=10, fig.height=6}
 yearly_average <- gas_raw %>% 
   mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
   filter(as.Date(period_month) < first_day_of_current_month) %>% 
@@ -147,7 +149,7 @@ gas_over_time_plot_recent <- ggplot(data = trend_recent_years, aes(x = period_mo
 ggplotly(gas_over_time_plot_recent)
 ```
 
-```{r Trend over the past few weeks, fig.width=13, fig.height=6}
+```{r Trend over the past few weeks, fig.width=10, fig.height=6}
 
 cutoff <- Sys.Date() %m-% months(6)
 
@@ -173,7 +175,7 @@ gas_over_time_plot_recent_weeks <- ggplot(data = trend_data_weeks, aes(x = as.Da
 ggplotly(gas_over_time_plot_recent_weeks)
 ```
 
-```{r Yearly Averages Compared, fig.width=13, fig.height=6}
+```{r Yearly Averages Compared, fig.width=10, fig.height=6}
 yearly_avg_compared <- gas_monthly_average_w_national %>% 
   mutate(year = year(period_month)) %>% 
   filter(year>=year(Sys.Date())-15, padd_descrip=="National (All Regions)") %>% 
@@ -192,7 +194,7 @@ ggplotly(yearly_avg_compared_plot)
 
 
 
-```{r Price Distribution,  fig.width=13, fig.height=6}
+```{r Price Distribution,  fig.width=10, fig.height=6}
 dist_plot_data <- gas_monthly_average_w_national %>%
   mutate(year = year(period_month)) %>%
   filter(year %in% c(2021, 2022, 2023))
@@ -209,7 +211,7 @@ price_dist_plot <- ggplot(dist_plot_data, aes(x = monthly_average, fill = as.fac
 ggplotly(price_dist_plot)#, width = 1000, height = 500)
 ```
 
-```{r Seasonality Analysis, fig.width=10, fig.height=8}
+```{r Seasonality Analysis, fig.width=11, fig.height=8}
 ts_national_df <- gas_monthly_average_w_national %>%
   filter(padd_descrip == "National (All Regions)", period_month>Sys.Date() %m-% years(10)) %>%
   arrange(period_month) %>% 
@@ -227,7 +229,7 @@ ggplot(ts_national_df, aes(x = monthly_average, fill = as.factor(month))) +
 
 ```
 
-```{r National Average Seasonal Gas Price Trends, fig.width=13, fig.height=6}
+```{r National Average Seasonal Gas Price Trends, fig.width=10, fig.height=6}
 national_trend_polt <- ggseasonplot(ts_national)+
   theme_minimal()+
   labs(title= "National Average Seasonal Gas Price Trends", x="Dollars")+
@@ -236,18 +238,16 @@ national_trend_polt <- ggseasonplot(ts_national)+
 ggplotly(national_trend_polt)
 ```
 
-```{r Seonsonal Cycle Plot, fig.width=13, fig.height=6}
+```{r Seonsonal Cycle Plot, fig.width=10, fig.height=6}
 ts_seasonal(ts_national, type="cycle", title="National Average: Monthly Cycle Trends")
 ```
 
 
-```{r Seasonal Box Plot, fig.width=13, fig.height=6}
+```{r Seasonal Box Plot, fig.width=10, fig.height=6}
 ts_seasonal(ts_national, type="box", title="National Average: Box Plot")
 ```
 
-
-
-```{r Detrended Series, fig.width=13, fig.height=6}
+```{r Detrended Series, fig.width=10, fig.height=6}
 ts_rollavg_detreend_national_df <- ts_national_df %>% 
   ungroup() %>% 
   mutate(lag = lag(monthly_average),
@@ -269,7 +269,7 @@ national_trend_normed_plot <- ggseasonplot(ts_national_detrended)+
 ggplotly(national_trend_normed_plot)
 ```
 
-```{r Polar Plot, fig.width=13, fig.height=6}
+```{r Polar Plot, fig.width=10, fig.height=6}
 ggseasonplot(ts_national, polar=TRUE)+
   theme_minimal()+
   labs(title="Polar Plot: National Average")
