@@ -29,6 +29,7 @@ The U.S. Energy Information Administration (EIA) provides critical, impartial en
 - `/notebooks` - Jupyter notebooks for API testing and exploratory analysis.
 - `/src` - Python scripts for the ETL process.
 - `/data` - Directory for storing extracted and transformed data.
+- `/R` - exploratory data analysis posted to Rpubs: http://rpubs.com/bseko/gas_price_tracker
 
 ## Usage
 
