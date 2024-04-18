@@ -7,7 +7,7 @@ params:
   db_file: "/database/gas_data.db"
 ---
 
-[See the Code](https://github.com/BrianS3/gas_forecasting/tree/main/R)
+[See the Code](https://github.com/BrianS3/gas_forecasting/blob/main/R/gas_EDA.Rmd)
 
 <style>
 body {
@@ -85,6 +85,20 @@ gas_over_time_plot <- ggplot(data = gas_monthly_average_w_national, aes(x = peri
 ggplotly(gas_over_time_plot)
 ```
 
+```{r Average Gas Price per Month Plot2, fig.width=13, fig.height=6}
+gas_over_time_plot2 <- ggplot(data = gas_monthly_average_w_national %>% 
+                               filter(period_month>as.Date("2022-01-01")), aes(x = period_month, y=monthly_average))+
+  geom_line(aes(color = padd_descrip))+
+  theme_minimal()+
+  scale_x_date(date_breaks = "3 months", date_labels="%m/%y")+
+  scale_y_continuous(breaks = seq(0,ceiling(max(gas_monthly_average_w_national$monthly_average)), by = 1),
+                     limits = c(0, NA)) +
+  labs(y="Dollars", x="", color = "Region", title="Average Gas Price per Month: Recent Trends")
+
+ggplotly(gas_over_time_plot2)
+```
+
+
 ```{r Average Gas Price per Month Plot: Last 6 Months, fig.width=10, fig.height=6}
 date_filter <- Sys.Date() %m-% months(6)
 
@@ -92,7 +106,7 @@ gas_over_time_plot <- ggplot(data = gas_monthly_average_w_national %>%
                                filter(period_month>date_filter), aes(x = period_month, y=monthly_average))+
   geom_line(aes(color = padd_descrip))+
   theme_minimal()+
-  scale_x_date(date_breaks = "1 months", date_labels="%B %Y")+
+  scale_x_date(date_breaks = "1 months", date_labels="%m/%y")+
   scale_y_continuous(breaks = seq(0,ceiling(max(gas_monthly_average_w_national$monthly_average)), by = 1),
                      limits = c(0, NA)) +
   labs(y="Dollars", x="", color = "Region", title="Average Gas Price per Month: Past 6 Months")
@@ -217,7 +231,7 @@ ts_national_df <- gas_monthly_average_w_national %>%
   arrange(period_month) %>% 
   mutate(year = year(period_month), month = month(period_month))
 
-ts_national <- ts(ts_national_df %>% pull(monthly_average), start = c(2014, 3), frequency = 12)
+ts_national <- ts(ts_national_df %>% pull(monthly_average), start = c(2014, 5), frequency = 12)
 
 ggplot(ts_national_df, aes(x = monthly_average, fill = as.factor(month))) +
   geom_density(alpha = 0.5) +  # Adjust alpha for transparency if desired
