@@ -201,7 +201,7 @@ yearly_avg_compared_plot <- ggplot(data=yearly_avg_compared, aes(x=year))+
   theme_minimal()+
   theme(panel.grid.minor = element_blank())+
   scale_x_continuous(breaks=seq(min(yearly_avg_compared$year), max(yearly_avg_compared$year), by = 1))+
-  labs(x="Dollars", y="", title="Yearly Averages Compared: National Average Price")
+  labs(x="", y="", title="Yearly Averages Compared: National Average Price")
   
 ggplotly(yearly_avg_compared_plot)
 ```
@@ -246,7 +246,7 @@ ggplot(ts_national_df, aes(x = monthly_average, fill = as.factor(month))) +
 ```{r National Average Seasonal Gas Price Trends, fig.width=10, fig.height=6}
 national_trend_polt <- ggseasonplot(ts_national)+
   theme_minimal()+
-  labs(title= "National Average Seasonal Gas Price Trends", x="Dollars")+
+  labs(title= "National Average Seasonal Gas Price Trends", x="")+
   scale_y_continuous(limits = c(0, NA))
 
 ggplotly(national_trend_polt)
@@ -276,7 +276,7 @@ ts_national_detrended <- ts(ts_rollavg_detreend_national_df %>% pull(detrend_val
 
 national_trend_normed_plot <- ggseasonplot(ts_national_detrended)+
   theme_minimal()+
-  labs(title= "National Average Seasonal Gas Price Detrended Series", x="Dollars")+
+  labs(title= "National Average Seasonal Gas Price Detrended Series", x="")+
   scale_y_continuous(limits=c(-2,2))
 
 
