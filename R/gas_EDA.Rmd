@@ -7,7 +7,7 @@ params:
   db_file: "/database/gas_data.db"
 ---
 
-[See the Code](https://github.com/BrianS3/gas_forecasting/blob/main/R/gas_EDA.Rmd)
+See the Code: https://github.com/BrianS3/gas_forecasting/blob/main/R/gas_EDA.Rmd
 
 <style>
 body {
@@ -227,11 +227,11 @@ ggplotly(price_dist_plot)#, width = 1000, height = 500)
 
 ```{r Seasonality Analysis, fig.width=11, fig.height=8}
 ts_national_df <- gas_monthly_average_w_national %>%
-  filter(padd_descrip == "National (All Regions)", period_month>Sys.Date() %m-% years(10)) %>%
+  filter(padd_descrip == "National (All Regions)", period_month>=(Sys.Date() %m-% months(1)) %m-% years(10)) %>%
   arrange(period_month) %>% 
   mutate(year = year(period_month), month = month(period_month))
 
-ts_national <- ts(ts_national_df %>% pull(monthly_average), start = c(2014, 5), frequency = 12)
+ts_national <- ts(ts_national_df %>% pull(monthly_average), start = c(2014, month(Sys.Date())-1), frequency = 12)
 
 ggplot(ts_national_df, aes(x = monthly_average, fill = as.factor(month))) +
   geom_density(alpha = 0.5) +  # Adjust alpha for transparency if desired
@@ -241,15 +241,6 @@ ggplot(ts_national_df, aes(x = monthly_average, fill = as.factor(month))) +
   theme(strip.text.y = element_text(angle = 0))  # Rotate the facet labels for better readability
 
 
-```
-
-```{r National Average Seasonal Gas Price Trends, fig.width=10, fig.height=6}
-national_trend_polt <- ggseasonplot(ts_national)+
-  theme_minimal()+
-  labs(title= "National Average Seasonal Gas Price Trends", x="")+
-  scale_y_continuous(limits = c(0, NA))
-
-ggplotly(national_trend_polt)
 ```
 
 ```{r Seonsonal Cycle Plot, fig.width=10, fig.height=6}
