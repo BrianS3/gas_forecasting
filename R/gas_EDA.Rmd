@@ -231,7 +231,7 @@ ts_national_df <- gas_monthly_average_w_national %>%
   arrange(period_month) %>% 
   mutate(year = year(period_month), month = month(period_month))
 
-ts_national <- ts(ts_national_df %>% pull(monthly_average), start = c(2014, month(Sys.Date())-1), frequency = 12)
+ts_national <- ts(ts_national_df %>% pull(monthly_average), start = c(2014, month(Sys.Date())-0), frequency = 12)
 
 ggplot(ts_national_df, aes(x = monthly_average, fill = as.factor(month))) +
   geom_density(alpha = 0.5) +  # Adjust alpha for transparency if desired
