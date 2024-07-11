@@ -1,3 +1,20 @@
+library(fable)
+library(fabletools)
+library(feasts)
+library(ggplot2)
+library(glue)
+library(janitor)
+library(lubridate)
+library(magrittr)
+library(progress)
+library(stringr)
+library(tidymodels)
+library(tidyr)
+library(tidyverse)
+library(tsibble) 
+library(tsibbledata)
+library(zoo)
+
 #' Creates global parameters for other functions, these are
 #' the time series start year, time series end year, test period start, test period end
 #' 
@@ -31,10 +48,8 @@ create_global_start_end <- function(fcst_start, fcst_end, fcst_test_start, fcst_
 #' while \code{forecast_interval_months} is calculated as the number of months between \code{global_fcst_test_end} and the end of the next year.
 create_interval_months <- function(){
   train_interval_months <<- floor((as.numeric(as.yearmon(global_fcst_test_end)-as.yearmon(global_fcst_test_start)) * 12)+1)
-  forecast_interval_months <<- floor((as.numeric(as.yearmon(paste0(year(Sys.Date())+1, "-12-31"))-as.yearmon(global_fcst_test_end)) * 12))
+  forecast_interval_months <<- 6
 }
-
-create_interval_months()
 
 #' Creates test/train split on tsibble object
 #' 
@@ -300,17 +315,10 @@ create_forecasts <- function(best_model, fcst_training_data, business_days=TRUE)
   fcsts <- trained_model %>% 
     forecast(h = glue::glue("{forecast_interval_months} months"))
   
-  if (business_days) {
-    vol_days <- mskRdb::gtr_msk_monthly_business_days(min(lubridate::year(fcsts$year_month)), max(lubridate::year(fcsts$year_month))) %>% 
-      rename(days = business_days) %>% 
-      mutate(year_month = make_yearmonth(year, month)) %>% 
-      select(-year, -month)
-  } else {
     vol_days <- get_calendar_days(min(lubridate::year(fcsts$year_month)), max(lubridate::year(fcsts$year_month))) %>% 
       rename(days = calendar_days) %>% 
       mutate(year_month = make_yearmonth(year, month)) %>% 
       select(-year, -month)
-  }
   
   fcsts_out <- fcsts %>% 
     left_join(vol_days, by=c("year_month")) %>% 
