@@ -69,11 +69,11 @@ model <- fcst_results[['model']]
 
 saveRDS(model, "forecast_model.RDS")
 
-gas_national_final <- gas_national_average_tsibble %>% 
-  as_tibble() %>% 
-  transmute(date=as.Date(year_month), value, forecast=0)
+# gas_national_final <- gas_national_average_tsibble %>% 
+#   as_tibble() %>% 
+#   transmute(date=as.Date(year_month), value, forecast=0)
 
-final_forecast <- rbind(gas_national_final, forecast %>% mutate(forecast=1), train_fcst %>% mutate(forecast=2))
+final_forecast <- rbind(forecast %>% mutate(forecast=1), train_fcst %>% mutate(forecast=2))
 
 dbExecute(con, "DELETE FROM 'forecast_results'")
 dbWriteTable(con, "forecast_results", final_forecast %>% mutate(date=as.character(date)), append = TRUE, row.names = FALSE)
