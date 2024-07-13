@@ -273,7 +273,7 @@ get_best_tuning_results <- function(gr_results, specific_label_nths = NULL) {
 #' @param best_model df filtered to specific cut from 'get_best_tuning_results'
 #' @param fcst_training_data input training data from 'test_train_split'
 #' 
-#' @return data frame of forecast for next n months, provides values per business/calendar day and totaled amounts
+#' @return data frame of forecast for next n months
 
 create_forecasts <- function(best_model, fcst_training_data) {
   if (best_model$.model == "mean") {
