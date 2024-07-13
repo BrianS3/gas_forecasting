@@ -1,4 +1,7 @@
+library(here)
 source("R/forecast_functions.R")
+
+retrain <- FALSE
 
 create_global_start_end(
   fcst_start = "1993-04-05",
@@ -38,7 +41,43 @@ gas_national_average_tsibble <- gas_national_average %>%
   as_tsibble(index = "year_month") %>% 
   transmute(year_month, value = monthly_average)
 
+if (retrain) {
+
 test_train <- test_train_split(gas_national_average_tsibble)
 
 test <- test_train[['test']]
 train <- test_train[['train']]
+
+gr_results <- grid_search(forecast_label = "national_average", train = train, test = test)
+
+saveRDS(gr_results, "R/gr_results.RDS")
+
+}
+
+gr_results <- readRDS("R/gr_results.RDS")
+
+best_model <- get_best_tuning_results(gr_results)
+
+
+
+train_results <- create_forecasts(best_model = best_model, fcst_training_data = train)
+fcst_results <- create_forecasts(best_model = best_model, fcst_training_data = gas_national_average_tsibble)
+
+train_fcst <- train_results[['fcst']]
+forecast <- fcst_results[['fcst']]
+model <- fcst_results[['model']]
+
+saveRDS(model, "forecast_model.RDS")
+
+gas_national_final <- gas_national_average_tsibble %>% 
+  as_tibble() %>% 
+  transmute(date=as.Date(year_month), value, forecast=0)
+
+final_forecast <- rbind(gas_national_final, forecast %>% mutate(forecast=1), train_fcst %>% mutate(forecast=2))
+
+dbExecute(con, "DELETE FROM 'forecast_results'")
+dbWriteTable(con, "forecast_results", final_forecast %>% mutate(date=as.character(date)), append = TRUE, row.names = FALSE)
+
+
+
+

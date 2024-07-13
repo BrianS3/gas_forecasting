@@ -200,14 +200,7 @@ grid_search <- function(forecast_label, train, test) {
 #' @param search_term string, used to identify run sequence, e.g. iap, or_cases, etc.
 #' 
 #' @return A data frame of the best tuning results
-get_best_tuning_results <- function(search_term, specific_label_nths = NULL) {
-  
-  gr_results <- readRDS(file.path(here::here(), "secure_data", "grid_search_results", "gr_results.RDS")) %>% 
-    filter(!is.na(MAPE))
-  gr_results$run_date <- lubridate::ymd_hms(gr_results$run_date)
-  
-  gr_results <- gr_results %>%
-    dplyr::filter(stringr::str_detect(label, search_term))
+get_best_tuning_results <- function(gr_results, specific_label_nths = NULL) {
   
   if (nrow(gr_results) == 0) {
     warning("No results found for the given search term.")
@@ -282,7 +275,7 @@ get_best_tuning_results <- function(search_term, specific_label_nths = NULL) {
 #' 
 #' @return data frame of forecast for next n months, provides values per business/calendar day and totaled amounts
 
-create_forecasts <- function(best_model, fcst_training_data, business_days=TRUE) {
+create_forecasts <- function(best_model, fcst_training_data) {
   if (best_model$.model == "mean") {
     model_formula <- MEAN(value ~ window(size = best_model$window_size))
   } else if (best_model$.model == "ets") {
@@ -315,17 +308,9 @@ create_forecasts <- function(best_model, fcst_training_data, business_days=TRUE)
   fcsts <- trained_model %>% 
     forecast(h = glue::glue("{forecast_interval_months} months"))
   
-    vol_days <- get_calendar_days(min(lubridate::year(fcsts$year_month)), max(lubridate::year(fcsts$year_month))) %>% 
-      rename(days = calendar_days) %>% 
-      mutate(year_month = make_yearmonth(year, month)) %>% 
-      select(-year, -month)
-  
-  fcsts_out <- fcsts %>% 
-    left_join(vol_days, by=c("year_month")) %>% 
-    mutate(vol_tot = round(.mean*days), date = as.Date(year_month)) %>% 
-    rename(vol_pbd = .mean) %>% 
-    select(-year_month, -value, -.model) %>% 
-    as_tibble()
+  fcsts_out <- fcsts %>%
+    as_tibble() %>% 
+    transmute(date = as.Date(year_month), value = .mean)
   
   return(list(fcst = fcsts_out, model = trained_model))
 }
