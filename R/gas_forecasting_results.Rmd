@@ -1,0 +1,78 @@
+---
+title: "Gas Forecasting Results"
+author: "Author: Brian Seko"
+date: "Last Updated: `r format(Sys.Date(), '%B %d, %Y')`"
+output: html_document
+params:
+  db_file: "/database/gas_data.db"
+---
+
+```{r setup, include=FALSE}
+library(DBI)
+library(RSQLite) 
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(plotly)
+library(lubridate)
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+```{r connect to gas forecasting database, echo=FALSE}
+con <- dbConnect(RSQLite::SQLite(), paste0(here(),params$db_file))
+gas_national_average <- dbGetQuery(con, "select * from avg_monthly_price") %>% 
+  as_tibble() %>% 
+  ungroup() %>% 
+  mutate(date = as.Date(paste0(year, "-", month, "-01"))) %>% 
+  filter(date<as.Date(floor_date(Sys.Date(), "month")), date>=floor_date(Sys.Date(), "year")-years(3)) %>% 
+  transmute(value = mean_price, date, forecast=0)
+
+fcst_results <- dbGetQuery(con, "select * from forecast_results")
+
+all_data <- rbind(gas_national_average, fcst_results) %>% 
+  mutate(dollars= round(value, 2), color_val=case_when(
+    forecast == 0 ~ "Actual",
+    forecast == 1 ~ "Forecast", 
+    forecast == 2 ~ "Training Forecast"
+  ))
+```
+
+```{r, echo=FALSE, fig.width=10, fig.height=6}
+plot <- ggplot(all_data)+
+  geom_line(aes(x=date, y=dollars, group=color_val, color=color_val,
+                text = paste("Month:", format(date, "%Y-%m"), "<br>Dollars:", dollars)),linewidth = 0.75)+
+  scale_y_continuous(limits=c(0, NA))+
+  scale_x_date(date_breaks = "1 years", date_labels = "%Y") +
+  theme_minimal()+
+  labs(title="National Average Gas Forecast", x="", y="Dollars", color="")
+
+ggplotly(p = plot,tooltip = "text")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
