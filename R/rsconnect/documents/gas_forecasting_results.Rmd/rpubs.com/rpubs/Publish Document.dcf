@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/1203773/76f34b1b16544375a79d9cb956f02e30
+bundleId: https://api.rpubs.com/api/v1/document/1203773/76f34b1b16544375a79d9cb956f02e30
+url: http://rpubs.com/bseko/1203773
+version: 1
