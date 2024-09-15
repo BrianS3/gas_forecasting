@@ -211,7 +211,7 @@ ggplotly(yearly_avg_compared_plot)
 ```{r Price Distribution,  fig.width=10, fig.height=6}
 dist_plot_data <- gas_monthly_average_w_national %>%
   mutate(year = year(period_month)) %>%
-  filter(year %in% c(2021, 2022, 2023))
+  filter(year %in% c(2021, 2022, 2023, 2024))
 
 price_dist_plot <- ggplot(dist_plot_data, aes(x = monthly_average, fill = as.factor(year))) +
   geom_density(alpha = 0.5) +  # Adjust alpha for transparency
