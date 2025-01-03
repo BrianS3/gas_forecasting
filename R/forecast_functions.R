@@ -133,9 +133,9 @@ grid_search <- function(forecast_label, train, test) {
                     fcsts <- model %>% forecast(h = length(test))
                     
                     accuracy_result <- accuracy(fcsts, test) %>% select(.model, MAE, MAPE)
-                    accuracy_result[["p"]] <- p_value
-                    accuracy_result[["d"]] <- d_value
-                    accuracy_result[["q"]] <- q_value
+                    accuracy_result[["P"]] <- p_value
+                    accuracy_result[["D"]] <- d_value
+                    accuracy_result[["Q"]] <- q_value
                     accuracy_result[["log_transform"]] <- log_transform
                     accuracy_result[["K"]] <- K_value
                     
