@@ -115,7 +115,7 @@ ggplotly(gas_over_time_plot)
 ```
 
 ```{r Average Gas Price, Last Month by Year, fig.width=10, fig.height=6}
-last_month <- current_month-1
+last_month <- if (current_month-1 == 0 ) 12
 last_month_name <- format(Sys.Date() %m-% months(1), '%B')
 
 last_month_national_average <- gas_monthly_average_w_national %>% 
