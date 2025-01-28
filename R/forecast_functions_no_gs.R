@@ -12,7 +12,6 @@ library(lubridate)
 # library(tidyr)
 library(tidyverse)
 library(tsibble)
-# library(tsibbledata)
 library(zoo)
 
 #' Creates global parameters for other functions, these are
@@ -76,7 +75,7 @@ test_train_split <- function(input_tsibble) {
 #' 
 #' @return A data list of accuracy results and forecast
 
-create_forecast <- function(train, test) {
+create_forecast <- function(train, test, interval_months) {
   model <- train %>%  model(
     mean = MEAN(value),
     mean_log = MEAN(log(value)),
@@ -90,19 +89,29 @@ create_forecast <- function(train, test) {
     rw_log = RW(log(value))
   )
   
-  fcsts <- model %>% forecast(h = glue::glue("{train_interval_months} months"))
-  accuracy_result <- accuracy(fcsts, test) %>% select(.model, MAE, MAPE)
+  fcsts <- model %>% forecast(h = glue::glue("{interval_months} months"))
   
-  fcsts_out <- fcsts %>%
-    as_tibble() %>% 
-    filter(
-      .model == !!pull(accuracy_result[accuracy_result$MAPE==min(accuracy_result$MAPE),".model"])
-    ) %>% 
-    transmute(date = as.Date(year_month), value = .mean)
-
+  if (nrow(test)>0) {
+    accuracy_result <- accuracy(fcsts, test) %>% select(.model, MAE, MAPE) %>% arrange(MAPE)
   
+    fcsts_out <- fcsts %>%
+      as_tibble() %>% 
+      filter(
+        .model == !!pull(accuracy_result[accuracy_result$MAPE==min(accuracy_result$MAPE),".model"])
+      ) %>% 
+      transmute(date = as.Date(year_month), value = .mean, model = .model, forecast=2)
   
-  return(list(results = accuracy_results, forecast=fcsts_out))
+    return(list(results = accuracy_result, forecast=fcsts_out))
+  } else {
+    return(fcsts %>% 
+             tibble() %>% 
+             transmute(date=as.Date(year_month),
+                       value = .mean,
+                       model = .model,
+                       forecast=1
+                       )
+           )
+  }
 }
 
 

@@ -34,7 +34,7 @@ all_data <- rbind(gas_national_average, fcst_results) %>%
   mutate(dollars= round(value, 2), color_val=case_when(
     forecast == 0 ~ "Actual",
     forecast == 1 ~ "Forecast", 
-    forecast == 2 ~ "Training Forecast"
+    forecast == 2 ~ "Testing"
   ))
 ```
 
