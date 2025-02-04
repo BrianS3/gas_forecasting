@@ -21,16 +21,17 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
 
 ```{r connect to gas forecasting database, echo=FALSE}
 con <- dbConnect(RSQLite::SQLite(), paste0(here(),params$db_file))
-gas_national_average <- dbGetQuery(con, "select * from avg_monthly_price") %>% 
+gas_national_average <- dbGetQuery(con, "select * from avg_monthly_price") %>%
   as_tibble() %>% 
   ungroup() %>% 
   mutate(date = as.Date(paste0(year, "-", month, "-01"))) %>% 
   filter(date<as.Date(floor_date(Sys.Date(), "month")), date>=floor_date(Sys.Date(), "year")-years(3)) %>% 
   transmute(value = mean_price, date, forecast=0)
 
-fcst_results <- dbGetQuery(con, "select * from forecast_results")
+fcst_results <- dbGetQuery(con, "select * from forecast_results") %>% 
+  filter(forecast_version=="june_24")
 
-all_data <- rbind(gas_national_average, fcst_results) %>% 
+all_data <- rbind(gas_national_average, fcst_results[, c("value", "date", "forecast")]) %>% 
   mutate(dollars= round(value, 2), color_val=case_when(
     forecast == 0 ~ "Actual",
     forecast == 1 ~ "Forecast", 
@@ -45,12 +46,34 @@ plot <- ggplot(all_data)+
   scale_y_continuous(limits=c(0, NA))+
   scale_x_date(date_breaks = "1 years", date_labels = "%Y") +
   theme_minimal()+
-  labs(title="National Average Gas Forecast", x="", y="Dollars", color="")
+  labs(title="National Average Gas Forecast: June 2024 Version", x="", y="Dollars", color="")
 
 ggplotly(p = plot,tooltip = "text")
 ```
 
+```{r, echo=FALSE}
+fcst_results_jan25 <- dbGetQuery(con, "select * from forecast_results") %>% 
+  filter(forecast_version=="jan_25")
 
+all_data_jan25 <- rbind(gas_national_average, fcst_results_jan25[, c("value", "date", "forecast")]) %>% 
+  mutate(dollars= round(value, 2), color_val=case_when(
+    forecast == 0 ~ "Actual",
+    forecast == 1 ~ "Forecast", 
+    forecast == 2 ~ "Testing"
+  ))
+```
+
+```{r, echo=FALSE, fig.width=10, fig.height=6}
+plot_jan25 <- ggplot(all_data_jan25)+
+  geom_line(aes(x=date, y=dollars, group=color_val, color=color_val,
+                text = paste("Month:", format(date, "%Y-%m"), "<br>Dollars:", dollars)),linewidth = 0.75)+
+  scale_y_continuous(limits=c(0, NA))+
+  scale_x_date(date_breaks = "1 years", date_labels = "%Y") +
+  theme_minimal()+
+  labs(title="National Average Gas Forecast: January 2025 Version", x="", y="Dollars", color="")
+
+ggplotly(p = plot_jan25,tooltip = "text")
+```
 
 
 

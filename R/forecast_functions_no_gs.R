@@ -46,7 +46,7 @@ create_global_start_end <- function(fcst_start, fcst_end, fcst_test_start, fcst_
 #' The \code{train_interval_months} is calculated as the number of months between \code{global_fcst_test_start} and \code{global_fcst_test_end},
 #' while \code{forecast_interval_months} is calculated as the number of months between \code{global_fcst_test_end} and the end of the next year.
 create_interval_months <- function(){
-  train_interval_months <<- floor((as.numeric(as.yearmon(global_fcst_test_end)-as.yearmon(global_fcst_test_start)) * 12)+1)
+  train_interval_months <<- round((as.numeric(global_fcst_test_end-global_fcst_test_start)/365)*12)
   forecast_interval_months <<- 6
 }
 
