@@ -1,13 +1,15 @@
 library(here)
 library(DBI)
 library(tidyverse)
+library(janitor)
 source("R/forecast_functions_no_gs.R")
 
 first_day_of_current_month <- as.Date(format(Sys.Date(), "%Y-%m-01"))
+fcast_version <- "jan_25"
 
 global_fcst_start <<- as.Date("1993-04-05")
 global_fcst_end <<- as.Date("2024-11-30") #as.Date(floor_date(Sys.Date(),unit = "month")-1)
-global_fcst_test_start <<-as.Date((floor_date(Sys.Date(), unit = "month")-1) - years(1))
+global_fcst_test_start <<- as.Date("2024-01-01") #floor_date(Sys.Date(),"year")-1
 global_fcst_test_end <<- as.Date("2024-11-30")  #as.Date(floor_date(Sys.Date(),unit = "month")-1)
 
 create_interval_months()
@@ -48,15 +50,26 @@ train <- test_train[['train']]
 fcst_train <- test_train[['fcst_train']]
 
 testing_forecast <- create_forecast(train, test, train_interval_months)
-full_forecast <- create_forecast(train = train, test=tibble(), interval_months = forecast_interval_months)
+full_forecast <- create_forecast(train = fcst_train, test=tibble(), interval_months = forecast_interval_months)
 
-out_data <- rbind(
-  testing_forecast['forecast'],
-  full_forecast
-) %>% 
-  mutate(forecast_version="jan_25")
+best_model <- testing_forecast[['results']] %>% 
+  filter(MAPE == min(MAPE)) %>% 
+  select(.model) %>% 
+  pull()
 
-dbWriteTable(con, "forecast_results", final_forecast %>% mutate(date=as.character(date)), append = TRUE, row.names = FALSE)
+out_data <- bind_rows(
+  testing_forecast[['forecast']],
+  full_forecast[full_forecast$model==best_model,]
+  ) %>% 
+  mutate(forecast_version=fcast_version)
+
+dbWriteTable(con, "accuracy_results", testing_forecast[['results']] %>% 
+               mutate(forecast_version = fcast_version) %>% 
+               clean_names(), append=TRUE, row.names=FALSE)
+
+dbWriteTable(con, "forecast_results", out_data %>% 
+               mutate(date=as.character(date)) %>% 
+               select(date, value, forecast, forecast_version, model), append = TRUE, row.names = FALSE)
 
 
 
