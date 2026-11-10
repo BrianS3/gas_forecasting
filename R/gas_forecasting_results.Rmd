@@ -3,76 +3,121 @@ title: "Gas Forecasting Results"
 author: "Author: Brian Seko"
 date: "Last Updated: `r format(Sys.Date(), '%B %d, %Y')`"
 output: html_document
-params:
-  db_file: "/database/gas_data.db"
 ---
 
+See the code: https://github.com/BrianS3/gas_forecasting/blob/main/R/gas_forecasting_process.R
+
 ```{r setup, include=FALSE}
-library(DBI)
-library(RSQLite) 
-library(tidyverse)
 library(here)
-library(ggplot2)
+source(here("R", "gas_data_prep.R"))
 library(plotly)
-library(lubridate)
+library(scales)
+library(knitr)
 
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, out.width = "100%")
+
+dollars <- function(x) paste0("$", formatC(x, format = "f", digits = 2))
+
+# results written by gas_forecasting_process.R
+con <- dbConnect(RSQLite::SQLite(), here("database", "gas_data.db"))
+projection         <- dbGetQuery(con, "select * from forecast_two_month")
+projection_monthly <- dbGetQuery(con, "select * from forecast_monthly") %>% mutate(month = as.Date(month))
+backtest           <- dbGetQuery(con, "select * from forecast_backtest") %>% mutate(start_month = as.Date(start_month))
+accuracy           <- dbGetQuery(con, "select * from forecast_accuracy")
+dbDisconnect(con)
+
+model_names <- c(naive = "Naive (last month carries forward)",
+                 ets   = "ETS (exponential smoothing)",
+                 arima = "ARIMA (on log price)")
+
+start_month <- as.Date(projection$start_month)
+end_month   <- as.Date(projection$end_month)
+
+# any weeks already in for the projected months
+so_far <- gas_weekly %>%
+  filter(date >= start_month) %>%
+  summarise(weeks = n(), avg = mean(price))
 ```
 
-```{r connect to gas forecasting database, echo=FALSE}
-con <- dbConnect(RSQLite::SQLite(), paste0(here(),params$db_file))
-gas_national_average <- dbGetQuery(con, "select * from avg_monthly_price") %>% 
-  as_tibble() %>% 
-  ungroup() %>% 
-  mutate(date = as.Date(paste0(year, "-", month, "-01"))) %>% 
-  filter(date<as.Date(floor_date(Sys.Date(), "month")), date>=floor_date(Sys.Date(), "year")-years(3)) %>% 
-  transmute(value = mean_price, date, forecast=0)
+# 2-month projection
 
-fcst_results <- dbGetQuery(con, "select * from forecast_results")
+The U.S. national average is projected to be **`r dollars(projection$projected)` per gallon** on average for
+**`r format(start_month, "%B")` – `r format(end_month, "%B %Y")`**.
 
-all_data <- rbind(gas_national_average, fcst_results) %>% 
-  mutate(dollars= round(value, 2), color_val=case_when(
-    forecast == 0 ~ "Actual",
-    forecast == 1 ~ "Forecast", 
-    forecast == 2 ~ "Training Forecast"
-  ))
+The likely range is **`r dollars(projection$lower_80)` to `r dollars(projection$upper_80)`** (80% interval:
+in 8 out of 10 simulated outcomes, the 2-month average landed in this range).
+
+| Month | Projected | Likely range (80%) |
+|---|---|---|
+`r paste0("| ", format(projection_monthly$month, "%B %Y"), " | ", dollars(projection_monthly$projected), " | ", dollars(projection_monthly$lower_80), " – ", dollars(projection_monthly$upper_80), " |", collapse = "\n")`
+
+`r if (so_far$weeks > 0) paste0("**So far:** ", so_far$weeks, " week(s) of ", format(start_month, "%B"), " are in, averaging ", dollars(so_far$avg), ".") else ""`
+
+Model used: **`r model_names[projection$model]`**, the model with the smallest miss in the backtest below.
+Projections use complete months through `r format(as.Date(projection$last_actual_month), "%B %Y")`.
+
+```{r projection chart, fig.width=10, fig.height=5}
+recent <- gas_monthly %>% filter(month >= start_month - years(3))
+
+projection_plot <- ggplot() +
+  geom_ribbon(data = projection_monthly,
+              aes(x = month, ymin = lower_80, ymax = upper_80), fill = "#2F855A", alpha = 0.2) +
+  geom_line(data = recent,
+            aes(x = month, y = price, group = 1,
+                text = paste0(format(month, "%B %Y"), " actual: ", dollars(price))),
+            color = "grey20", linewidth = 0.8) +
+  geom_line(data = bind_rows(tail(recent, 1) %>% rename(projected = price), projection_monthly),
+            aes(x = month, y = projected, group = 1), color = "#2F855A", linetype = "dashed", linewidth = 0.8) +
+  geom_point(data = projection_monthly,
+             aes(x = month, y = projected,
+                 text = paste0(format(month, "%B %Y"), " projected: ", dollars(projected),
+                               "<br>Range: ", dollars(lower_80), " - ", dollars(upper_80))),
+             color = "#2F855A", size = 2.5) +
+  scale_y_continuous(labels = dollar, limits = c(0, NA)) +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b '%y") +
+  theme_minimal() +
+  labs(title = "Monthly national average: actual (black) and projected (green)", x = "", y = "Dollars per gallon")
+
+ggplotly(projection_plot, tooltip = "text")
 ```
 
-```{r, echo=FALSE, fig.width=10, fig.height=6}
-plot <- ggplot(all_data)+
-  geom_line(aes(x=date, y=dollars, group=color_val, color=color_val,
-                text = paste("Month:", format(date, "%Y-%m"), "<br>Dollars:", dollars)),linewidth = 0.75)+
-  scale_y_continuous(limits=c(0, NA))+
-  scale_x_date(date_breaks = "1 years", date_labels = "%Y") +
-  theme_minimal()+
-  labs(title="National Average Gas Forecast", x="", y="Dollars", color="")
+# How good has this been?
 
-ggplotly(p = plot,tooltip = "text")
+To check the method, we went back to each of the last `r nrow(backtest) / nrow(accuracy)` months, pretended
+it was that month, projected the next 2-month average, and compared it to what actually happened.
+
+```{r accuracy table}
+accuracy %>%
+  transmute(Model = model_names[model],
+            `Average miss` = dollars(avg_miss_dollars),
+            `Bias` = paste0(ifelse(avg_bias_dollars >= 0, "+", "-"), dollars(abs(avg_bias_dollars))),
+            `Windows tested` = windows_tested) %>%
+  kable(align = "lrrr")
 ```
 
+*Average miss* is how far off the 2-month average was, on average. *Bias* is the typical direction:
+negative means the projections ran low (prices came in higher than projected).
 
+```{r backtest chart, fig.width=10, fig.height=5}
+best_backtest <- backtest %>% filter(model == projection$model)
 
+backtest_plot <- ggplot(best_backtest, aes(x = start_month)) +
+  geom_line(aes(y = actual, color = "Actual 2-month average", group = 1,
+                text = paste0(format(start_month, "%b %Y"), " + next month<br>Actual: ", dollars(actual))),
+            linewidth = 0.8) +
+  geom_line(aes(y = projected, color = "Projected 2 months earlier", group = 1,
+                text = paste0(format(start_month, "%b %Y"), " + next month<br>Projected: ", dollars(projected),
+                              "<br>Miss: ", dollars(error))),
+            linewidth = 0.8, linetype = "dashed") +
+  scale_color_manual(values = c("Actual 2-month average" = "grey20", "Projected 2 months earlier" = "#2F855A")) +
+  scale_y_continuous(labels = dollar) +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b '%y") +
+  theme_minimal() +
+  labs(title = "Backtest: what the model projected vs. what happened", x = "2-month window starting", y = "", color = "")
 
+ggplotly(backtest_plot, tooltip = "text")
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+**Limits.** These models only look at past prices. They can't see a war, a hurricane, or an OPEC decision
+coming, so sudden shocks (like the jump in March 2026) show up as big misses. Treat the projection as
+"where prices are heading if nothing major changes."

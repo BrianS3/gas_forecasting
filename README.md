@@ -33,10 +33,17 @@ The U.S. Energy Information Administration (EIA) provides critical, impartial en
 
 ## Usage
 
-Run the main script to start the ETL process:
+Refresh everything (data, 2-month projection, both reports) from R with the project open:
 ```
-python src/main.py
+source("R/run_all.R")
 ```
+
+Or step by step:
+1. `python lib/eia_gas_price_pipeline.py` pulls new weekly EIA prices (U.S. national average plus the 5 regions).
+2. `R/gas_forecasting_process.R` backtests 3 models and saves a 2-month national average projection to the database.
+3. Knit `R/gas_EDA.Rmd` (price context, politics timeline, patterns) and `R/gas_forecasting_results.Rmd` (projection).
+
+Hand-edited context lives in `R/context_tables.R`: who controlled the White House, Senate, and House, and the key events labeled on the charts.
 
 ## Features
 

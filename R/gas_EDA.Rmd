@@ -2,295 +2,300 @@
 title: "Gas Price Tracker"
 author: "Author: Brian Seko"
 date: "Last Updated: `r format(Sys.Date(), '%B %d, %Y')`"
-output: html_document
-params:
-  db_file: "/database/gas_data.db"
+output:
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
-See the Code: https://github.com/BrianS3/gas_forecasting/blob/main/R/gas_EDA.Rmd
+See the code: https://github.com/BrianS3/gas_forecasting/blob/main/R/gas_EDA.Rmd
 
-<style>
-body {
-  text-align: left;
-}
-.main-container {
-  margin-left: auto;
-  margin-right: 500px;
-  max-width: 1000px; /* Adjust as needed */
-}
-</style>
+All prices are the **U.S. national weekly average, all grades, dollars per gallon** from the
+U.S. Energy Information Administration (EIA). Prices are not adjusted for inflation.
 
 ```{r setup, include=FALSE}
-library(DBI)
-library(RSQLite) 
-library(tidyverse)
 library(here)
-library(lubridate)
-library(ggplot2)
-library(TSstudio)
+source(here("R", "gas_data_prep.R"))
 library(plotly)
-library(stargazer)
-library(glue)
-library(tsibble)
-library(forecast)
 library(scales)
-library(zoo)
+library(knitr)
 
-knitr::opts_chunk$set(echo = FALSE, fig.show='asis')
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, out.width = "100%")
 
-current_date <- Sys.Date()
-current_month <- month(Sys.Date())
-first_day_of_current_month <- as.Date(format(current_date, "%Y-%m-01"))
+dollars <- function(x) paste0("$", formatC(x, format = "f", digits = 2))
+
+# --- headline numbers ---
+latest       <- gas_weekly %>% slice_max(date, n = 1)
+four_wks_ago <- gas_weekly %>% filter(date <= latest$date - 28) %>% slice_max(date, n = 1)
+one_yr_ago   <- gas_weekly %>% filter(date <= latest$date - 364) %>% slice_max(date, n = 1)
+record       <- gas_weekly %>% slice_max(price, n = 1, with_ties = FALSE)
+this_year    <- gas_weekly %>% filter(year(date) == year(latest$date))
+year_low     <- this_year %>% slice_min(price, n = 1, with_ties = FALSE)
+year_high    <- this_year %>% slice_max(price, n = 1, with_ties = FALSE)
+
+change_text <- function(now, then) {
+  diff <- now - then
+  paste0(ifelse(diff >= 0, "up ", "down "), dollars(abs(diff)),
+         " (", percent(diff / then, accuracy = 1), ")")
+}
+
+# --- 2-month projection (written by gas_forecasting_process.R) ---
+con <- dbConnect(RSQLite::SQLite(), here("database", "gas_data.db"))
+projection <- dbGetQuery(con, "select * from forecast_two_month")
+projection_monthly <- dbGetQuery(con, "select * from forecast_monthly") %>%
+  mutate(month = as.Date(month))
+dbDisconnect(con)
+
+# --- the first full week on/after each event, so we can put a dot on the line ---
+events_on_chart <- key_events %>%
+  left_join(gas_weekly %>% select(week = date, price, president),
+            by = join_by(closest(date <= week))) %>%
+  filter(!is.na(price))
 ```
 
-```{r connect to gas forecasting database}
-con <- dbConnect(RSQLite::SQLite(), paste0(here(),params$db_file))
-gas_raw <- dbGetQuery(con, "select * from gas_prices")
-```
+# Where prices stand
 
-```{r Describe Average by Month}
-gas_monthly_average <- gas_raw %>% 
-  mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
-  filter(period_month < first_day_of_current_month) %>% #only show complete months
-  group_by(period_month, padd) %>% 
-  summarise(monthly_average = round(mean(price),2), .groups = "drop") %>% 
-  mutate(
-    padd_descrip = case_when(
-      padd=="PADD 1" ~"East Coast",
-      padd=="PADD 2" ~"Midwest", 
-      padd=="PADD 3" ~"Gulf Coast",
-      padd=="PADD 4" ~"Rocky Mountain",
-      TRUE ~"West Coast"),
-  ) %>% select(-padd)
+| | |
+|---|---|
+| **Latest week** (`r format(latest$date, "%b %d, %Y")`) | **`r dollars(latest$price)`** per gallon |
+| vs. 4 weeks ago | `r change_text(latest$price, four_wks_ago$price)` |
+| vs. 1 year ago | `r change_text(latest$price, one_yr_ago$price)` |
+| `r year(latest$date)` range so far | `r dollars(year_low$price)` (`r format(year_low$date, "%b %d")`) to `r dollars(year_high$price)` (`r format(year_high$date, "%b %d")`) |
+| Record high | `r dollars(record$price)` (`r format(record$date, "%b %d, %Y")`) |
+| **Projected average, `r format(as.Date(projection$start_month), "%b")`–`r format(as.Date(projection$end_month), "%b %Y")`** | **`r dollars(projection$projected)`** (likely range `r dollars(projection$lower_80)`–`r dollars(projection$upper_80)`). See [Gas Forecasting Results](gas_forecasting_results.html) |
 
-gas_national_average <- gas_raw %>% 
-  mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
-  filter(as.Date(period_month) < first_day_of_current_month) %>% 
-  group_by(period_month) %>% 
-  summarise(monthly_average = round(mean(price),2), .groups = "drop") %>% 
-  mutate(padd_descrip="National (All Regions)")
+# What's going on
 
-gas_monthly_average_w_national <- rbind(gas_monthly_average,gas_national_average)
-```
+*Written November 2026. Update this section by hand when the story changes.*
 
-```{r Average Gas Price per Month Plot, fig.width=13, fig.height=6}
-gas_over_time_plot <- ggplot(data = gas_monthly_average_w_national, aes(x = period_month, y=monthly_average))+
-  geom_line(aes(color = padd_descrip))+
-  theme_minimal()+
-  scale_x_date(date_breaks = "5 years", date_labels="%Y")+
-  scale_y_continuous(breaks = seq(0,ceiling(max(gas_monthly_average_w_national$monthly_average)), by = 1),
-                     limits = c(0, NA)) +
-  labs(y="Dollars", x="", color = "Region", title="Average Gas Price per Month")
+- **War with Iran pushed prices up fast.** The U.S. and Israel struck Iran on February 28, 2026, and Iran cut off
+  access to the Strait of Hormuz, which carries roughly a fifth of the world's oil. The national average went from
+  `r dollars(filter(gas_monthly, month == as.Date("2026-01-01"))$price)` in January to
+  `r dollars(filter(gas_monthly, month == as.Date("2026-05-01"))$price)` in May, the sharpest monthly run-up in the
+  data, steeper than after Hurricane Katrina in 2005 or Russia's 2022 invasion of Ukraine.
+- **A second crude spike in September.** Prices eased over the summer and then climbed again. EIA attributes the
+  September increase to higher crude oil prices plus wider refining margins ("crack spreads").
+- **What EIA expects next.** EIA's October 2026 Short-Term Energy Outlook expects retail gasoline to hold near
+  September levels in October and then slowly decrease along with crude oil prices.
 
-ggplotly(gas_over_time_plot)
-```
+Sources: [EIA Short-Term Energy Outlook, Oct 2026](https://www.eia.gov/outlooks/steo/archives/Oct26.pdf),
+[PBS NewsHour](https://www.pbs.org/newshour/economy/iran-war-hits-home-as-gasoline-prices-fuel-significant-u-s-inflation-jump),
+[Kelley Blue Book / AAA](https://www.kbb.com/car-news/aaa-national-average-gas-prices-spiked-in-march-2026/).
 
-```{r Average Gas Price per Month Plot2, fig.width=13, fig.height=6}
-gas_over_time_plot2 <- ggplot(data = gas_monthly_average_w_national %>% 
-                               filter(period_month>as.Date("2022-01-01")), aes(x = period_month, y=monthly_average))+
-  geom_line(aes(color = padd_descrip))+
-  theme_minimal()+
-  scale_x_date(date_breaks = "3 months", date_labels="%m/%y")+
-  scale_y_continuous(breaks = seq(0,ceiling(max(gas_monthly_average_w_national$monthly_average)), by = 1),
-                     limits = c(0, NA)) +
-  labs(y="Dollars", x="", color = "Region", title="Average Gas Price per Month: Recent Trends")
+```{r recent chart, fig.width=10, fig.height=5}
+recent_start <- latest$date - years(2)
 
-ggplotly(gas_over_time_plot2)
-```
+recent_weeks  <- gas_weekly %>% filter(date >= recent_start)
+recent_events <- events_on_chart %>% filter(date >= recent_start)
 
-
-```{r Average Gas Price per Month Plot: Last 6 Months, fig.width=10, fig.height=6}
-date_filter <- Sys.Date() %m-% months(6)
-
-gas_over_time_plot <- ggplot(data = gas_monthly_average_w_national %>% 
-                               filter(period_month>date_filter), aes(x = period_month, y=monthly_average))+
-  geom_line(aes(color = padd_descrip))+
-  theme_minimal()+
-  scale_x_date(date_breaks = "1 months", date_labels="%m/%y")+
-  scale_y_continuous(breaks = seq(0,ceiling(max(gas_monthly_average_w_national$monthly_average)), by = 1),
-                     limits = c(0, NA)) +
-  labs(y="Dollars", x="", color = "Region", title="Average Gas Price per Month: Past 6 Months")
-
-ggplotly(gas_over_time_plot)
-```
-
-```{r Average Gas Price, Last Month by Year, fig.width=10, fig.height=6}
-last_month <- if (current_month-1 == 0 ) 12 else current_month-1
-last_month_name <- format(Sys.Date() %m-% months(1), '%B')
-
-last_month_national_average <- gas_monthly_average_w_national %>% 
-  filter(month(period_month) == last_month, padd_descrip == "National (All Regions)", period_month>Sys.Date() %m-% years(10)) %>% 
-  mutate(year = year(period_month))
-
-gas_month_comparison_plot <- ggplot(data = last_month_national_average)+
-  geom_bar(aes(x=year, y=monthly_average), stat="identity", fill = '#007bff')+
-  theme_minimal()+
-  scale_x_continuous(breaks = seq(min(last_month_national_average$year), max(last_month_national_average$year), by = 1))+
-  labs(x = "Year", y = "Monthly Average", title = glue("{last_month_name} Over Time"))
-
-ggplotly(gas_month_comparison_plot)
-```
-
-
-```{r Average Gas Price per Month Plot Recent Year Focus, fig.width=10, fig.height=6}
-yearly_average <- gas_raw %>% 
-  mutate(year = year(period), month=month(period), period_month=as.Date(paste0(year,"-", month, "-01"))) %>% 
-  filter(as.Date(period_month) < first_day_of_current_month) %>% 
-  group_by(year) %>% 
-  summarise(yearly_average = round(mean(price),2), .groups = "drop")
-
-trend_recent_years <- gas_monthly_average_w_national %>% 
-  filter(year(period_month)>=2020, padd_descrip=="National (All Regions)") %>% 
-  mutate(year = year(period_month)) %>% 
-  left_join(yearly_average, by="year")
-
-gas_over_time_plot_recent <- ggplot(data = trend_recent_years, aes(x = period_month, y=monthly_average))+
-  geom_line(aes(color = "Monthly Average"), linewidth=0.75)+
-  geom_line(aes(y=yearly_average, color="Yearly Average"), linewidth=0.75)+
-  geom_vline(xintercept = as.Date("2021-01-01"), linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = as.Date("2022-01-01"), linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = as.Date("2023-01-01"), linetype = "dashed", color = "blue") +
-  theme_minimal()+
-  scale_x_date(date_breaks = "6 months", date_labels="%m/%y")+
-  scale_y_continuous(breaks = seq(0,ceiling(max(trend_recent_years$monthly_average)), by = 1),
-                     limits = c(0, NA)) +
-  labs(y="Dollars", x="", color = "", title="National Average Gas Price per Month: 2020-YTD")+
-  theme(text = element_text(size = 14), # Set all text size to 14
-        axis.title = element_text(size = 14), # Set axis titles size to 14
-        axis.text = element_text(size = 14), # Set axis text size to 14
-        plot.title = element_text(size = 14))
-
-ggplotly(gas_over_time_plot_recent)
-```
-
-```{r Trend over the past few weeks, fig.width=10, fig.height=6}
-
-cutoff <- Sys.Date() %m-% months(6)
-
-trend_data_weeks <- trend_recent_years %>% 
-  filter(as.Date(period_month)>=as.Date(cutoff)) %>% 
-  mutate(text_pos = monthly_average-.25)
-
-gas_over_time_plot_recent_weeks <- ggplot(data = trend_data_weeks, aes(x = as.Date(period_month), y=monthly_average))+
-  geom_line(aes(color = "Monthly Average"), linewidth=0.75)+
-  geom_line(aes(y=yearly_average, color="Yearly Average"), linewidth=0.75)+
-  geom_point(aes(color = "Monthly Average"))+
-  geom_text(aes(y = text_pos, label=monthly_average, color = "Monthly Average"), vjust=1.5, show.legend = FALSE)+
-  theme_minimal()+
-  scale_x_date(date_breaks = "1 months", date_labels="%m/%y")+
-  scale_y_continuous(breaks = seq(0,ceiling(max(trend_recent_years$monthly_average)), by = 1),
-                     limits = c(0, NA)) +
-  labs(y="Dollars", x="", color = "", title="National Average Gas Price: Past 6 Months")+
-  theme(text = element_text(size = 14), # Set all text size to 14
-        axis.title = element_text(size = 14), # Set axis titles size to 14
-        axis.text = element_text(size = 14), # Set axis text size to 14
-        plot.title = element_text(size = 14))
-  
-ggplotly(gas_over_time_plot_recent_weeks)
-```
-
-```{r Yearly Averages Compared, fig.width=10, fig.height=6}
-yearly_avg_compared <- gas_monthly_average_w_national %>% 
-  mutate(year = year(period_month)) %>% 
-  filter(year>=year(Sys.Date())-15, padd_descrip=="National (All Regions)") %>% 
-  group_by(year) %>% 
-  summarise(yearly_average = mean(monthly_average), .groups="drop")
-
-yearly_avg_compared_plot <- ggplot(data=yearly_avg_compared, aes(x=year))+
-  geom_bar(aes(y=yearly_average), stat="identity", fill = "#007bff")+
-  theme_minimal()+
-  theme(panel.grid.minor = element_blank())+
-  scale_x_continuous(breaks=seq(min(yearly_avg_compared$year), max(yearly_avg_compared$year), by = 1))+
-  labs(x="", y="", title="Yearly Averages Compared: National Average Price")
-  
-ggplotly(yearly_avg_compared_plot)
-```
-
-
-
-```{r Price Distribution,  fig.width=10, fig.height=6}
-dist_plot_data <- gas_monthly_average_w_national %>%
-  mutate(year = year(period_month)) %>%
-  filter(year %in% c(2021, 2022, 2023, 2024))
-
-price_dist_plot <- ggplot(dist_plot_data, aes(x = monthly_average, fill = as.factor(year))) +
-  geom_density(alpha = 0.5) +  # Adjust alpha for transparency
-  facet_wrap(~padd_descrip) +
-  scale_fill_brewer(palette = "Set1") +
-  scale_x_continuous(breaks = seq(floor(min(dist_plot_data$monthly_average)), ceiling(max(dist_plot_data$monthly_average)), by = 0.5)) +
+recent_plot <- ggplot() +
+  geom_line(data = recent_weeks,
+            aes(x = date, y = price, group = 1,
+                text = paste0("Week of ", format(date, "%b %d, %Y"), "<br>", dollars(price))),
+            color = "grey20", linewidth = 0.6) +
+  geom_point(data = projection_monthly,
+             aes(x = month + 14, y = projected,
+                 text = paste0(format(month, "%B %Y"), " projection<br>", dollars(projected),
+                               " (", dollars(lower_80), "-", dollars(upper_80), ")")),
+             color = "#2F855A", size = 2.5) +
+  geom_errorbar(data = projection_monthly,
+                aes(x = month + 14, ymin = lower_80, ymax = upper_80),
+                color = "#2F855A", width = 8) +
+  geom_point(data = recent_events,
+             aes(x = week, y = price, text = paste0(event, "<br>", format(date, "%b %d, %Y"))),
+             color = "#D69E2E", size = 3) +
+  scale_y_continuous(labels = dollar, limits = c(0, NA)) +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b '%y") +
   theme_minimal() +
-  theme(panel.spacing = unit(1, "lines")) +
-  labs(title="Price Distribution by Year by Region", fill = "Year", x = "Monthly Average", y = "Density")
+  labs(title = "Last 2 years: weekly price (black), events (gold), 2-month projection (green)",
+       x = "", y = "Dollars per gallon")
 
-ggplotly(price_dist_plot)#, width = 1000, height = 500)
+ggplotly(recent_plot, tooltip = "text")
 ```
 
-```{r Seasonality Analysis, fig.width=11, fig.height=8}
-ts_national_df <- gas_monthly_average_w_national %>%
-  filter(padd_descrip == "National (All Regions)", period_month>=(Sys.Date() %m-% months(1)) %m-% years(10)) %>%
-  arrange(period_month) %>% 
-  mutate(year = year(period_month), month = month(period_month))
+# The long view: price and who was in charge
 
-ts_national <- ts(ts_national_df %>% pull(monthly_average), start = c(2014, month(Sys.Date())-0), frequency = 12)
+The top chart is the weekly national average since 1993. Shading shows the president's party
+(**blue = Democrat, red = Republican**) and gold dots mark major events. The bottom strip shows which party
+held the White House, Senate, and House. Hover for details, and drag to zoom (double-click to reset).
 
-ggplot(ts_national_df, aes(x = monthly_average, fill = as.factor(month))) +
-  geom_density(alpha = 0.5) +  # Adjust alpha for transparency if desired
-  facet_grid(rows = vars(as.factor(month))) +  # Use facet_grid to layout plots in a grid
+```{r timeline, fig.width=11, fig.height=7}
+first_week <- min(gas_weekly$date)
+last_week  <- max(gas_weekly$date)
+top        <- max(gas_weekly$price) * 1.1
+
+# shading behind the price line, one band per presidential term
+pres_bands <- presidencies %>%
+  mutate(start = pmax(start, first_week), end = pmin(end, last_week),
+         middle = start + (end - start) / 2)
+
+price_plot <- ggplot() +
+  geom_rect(data = pres_bands,
+            aes(xmin = start, xmax = end, ymin = 0, ymax = top, fill = pres_party, text = label),
+            alpha = 0.15) +
+  geom_text(data = pres_bands, aes(x = middle, y = top * 0.97, label = president), size = 3) +
+  geom_line(data = gas_weekly,
+            aes(x = date, y = price, group = 1,
+                text = paste0("Week of ", format(date, "%b %d, %Y"), "<br>", dollars(price),
+                              "<br>President: ", president,
+                              "<br>Senate: ", senate, " | House: ", house)),
+            color = "grey20", linewidth = 0.4) +
+  geom_point(data = events_on_chart,
+             aes(x = week, y = price, text = paste0(event, "<br>", format(date, "%b %d, %Y"))),
+             color = "#D69E2E", size = 2.5) +
+  scale_fill_manual(values = party_colors) +
+  scale_y_continuous(labels = dollar) +
   theme_minimal() +
-  labs(x = "Monthly Average", y = "Density", title = "Density Plot by Month for National Monthly Average", fill = "Month") +
-  theme(strip.text.y = element_text(angle = 0))  # Rotate the facet labels for better readability
+  theme(legend.position = "none") +
+  labs(x = "", y = "Dollars per gallon")
 
+# strip showing party control of each branch
+control_strip <- control_periods %>%
+  filter(end > first_week) %>%
+  mutate(start = pmax(start, first_week), end = pmin(end, last_week)) %>%
+  pivot_longer(c(pres_party, senate, house), names_to = "body", values_to = "party") %>%
+  mutate(body = recode(body, pres_party = "White House", senate = "Senate", house = "House"),
+         row  = match(body, c("House", "Senate", "White House")))
 
+strip_plot <- ggplot(control_strip) +
+  geom_rect(aes(xmin = start, xmax = end, ymin = row - 0.45, ymax = row + 0.45, fill = party,
+                text = paste0(body, ": ", party, "<br>", format(start, "%b %Y"), " to ", format(end, "%b %Y"))),
+            color = "white", linewidth = 0.2) +
+  scale_fill_manual(values = party_colors) +
+  scale_y_continuous(breaks = 1:3, labels = c("House", "Senate", "White House")) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
+  theme_minimal() +
+  theme(legend.position = "none", panel.grid = element_blank()) +
+  labs(x = "", y = "")
+
+subplot(ggplotly(price_plot, tooltip = "text"),
+        ggplotly(strip_plot, tooltip = "text"),
+        nrows = 2, heights = c(0.78, 0.22), shareX = TRUE, titleY = TRUE)
 ```
 
-```{r Seonsonal Cycle Plot, fig.width=10, fig.height=6}
-ts_seasonal(ts_national, type="cycle", title="National Average: Monthly Cycle Trends")
+## By president
+
+```{r by president}
+by_president <- gas_weekly %>%
+  mutate(term_id = consecutive_id(president)) %>%
+  group_by(term_id, president, pres_party) %>%
+  summarise(from        = min(date),
+            to          = max(date),
+            avg_price   = mean(price),
+            first_price = first(price),
+            last_price  = last(price),
+            low         = min(price),
+            high        = max(price),
+            .groups = "drop") %>%
+  mutate(change = last_price - first_price)
+
+by_president %>%
+  transmute(President = president, Party = pres_party,
+            From = format(from, "%b %Y"),
+            To   = ifelse(to == last_week, "now", format(to, "%b %Y")),
+            `Average` = dollars(avg_price),
+            `Price at start` = dollars(first_price),
+            `Price at end`   = dollars(last_price),
+            `Change`         = paste0(ifelse(change >= 0, "+", "-"), dollars(abs(change))),
+            `Low`  = dollars(low),
+            `High` = dollars(high)) %>%
+  kable(align = "llllrrrrrr")
 ```
 
+*Clinton's row starts in April 1993, when EIA's weekly series begins.*
 
-```{r Seasonal Box Plot, fig.width=10, fig.height=6}
-ts_seasonal(ts_national, type="box", title="National Average: Box Plot")
+## By who controlled Washington
+
+Each row is a stretch where the White House, Senate, and House majorities stayed the same.
+
+```{r by control period}
+by_control <- gas_weekly %>%
+  mutate(period_id = consecutive_id(president, house, senate)) %>%
+  group_by(period_id, president, pres_party, senate, house, control) %>%
+  summarise(from        = min(date),
+            to          = max(date),
+            avg_price   = mean(price),
+            first_price = first(price),
+            last_price  = last(price),
+            .groups = "drop") %>%
+  mutate(change = last_price - first_price)
+
+by_control %>%
+  transmute(From = format(from, "%b %Y"),
+            To   = ifelse(to == last_week, "now", format(to, "%b %Y")),
+            President = paste0(president, " (", pres_party, ")"),
+            Senate = senate, House = house, Control = control,
+            `Average` = dollars(avg_price),
+            `Price at start` = dollars(first_price),
+            `Price at end`   = dollars(last_price),
+            `Change` = paste0(ifelse(change >= 0, "+", "-"), dollars(abs(change)))) %>%
+  kable(align = "lllcccrrrr")
 ```
 
-```{r Detrended Series, fig.width=10, fig.height=6}
-ts_rollavg_detreend_national_df <- ts_national_df %>% 
-  ungroup() %>% 
-  mutate(lag = lag(monthly_average),
-         lag2 = lag(monthly_average,2),
-         lag3 = lag(monthly_average,3))%>% 
-  filter(!is.na(lag3)) %>% 
-  rowwise() %>% 
-  mutate(lag_monthly_average = mean(c(lag,lag2,lag3))) %>% 
-  mutate(detrend_val = monthly_average-lag_monthly_average)
+**Read these tables with care.** Gas prices mostly follow the global price of crude oil, which is driven by
+wars, OPEC decisions, recessions, and hurricanes far more than by who holds office. Every big move on the
+chart above lines up with one of those events. Prices have also risen over 30+ years with inflation,
+so later administrations will tend to show higher averages regardless of policy.
 
-ts_national_detrended <- ts(ts_rollavg_detreend_national_df %>% pull(detrend_val), start = c(2014, 6), frequency = 12)
+# Patterns worth knowing
 
-national_trend_normed_plot <- ggseasonplot(ts_national_detrended)+
-  theme_minimal()+
-  labs(title= "National Average Seasonal Gas Price Detrended Series", x="")+
-  scale_y_continuous(limits=c(-2,2))
+## Typical seasonal pattern
 
+```{r seasonality, fig.width=10, fig.height=4.5}
+seasonal_years <- (year(Sys.Date()) - 15):(year(Sys.Date()) - 1)
 
-ggplotly(national_trend_normed_plot)
+seasonal <- gas_monthly %>%
+  mutate(year = year(month), month_name = month(month, label = TRUE)) %>%
+  filter(year %in% seasonal_years) %>%
+  group_by(year) %>%
+  mutate(vs_year_avg = price / mean(price) - 1) %>%
+  group_by(month_name) %>%
+  summarise(typical = median(vs_year_avg), .groups = "drop")
+
+cheapest <- seasonal %>% slice_min(typical, n = 1)
+priciest <- seasonal %>% slice_max(typical, n = 1)
+
+seasonal_plot <- ggplot(seasonal, aes(x = month_name, y = typical,
+                                      text = paste0(month_name, ": ", percent(typical, accuracy = 0.1),
+                                                    " vs. that year's average"))) +
+  geom_col(aes(fill = typical > 0)) +
+  scale_fill_manual(values = c("TRUE" = "#C05621", "FALSE" = "#2B6CB0")) +
+  scale_y_continuous(labels = percent) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = paste0("How each month compares to its year's average (median, ",
+                      min(seasonal_years), "-", max(seasonal_years), ")"),
+       x = "", y = "")
+
+ggplotly(seasonal_plot, tooltip = "text")
 ```
 
-```{r Polar Plot, fig.width=10, fig.height=6}
-ggseasonplot(ts_national, polar=TRUE)+
-  theme_minimal()+
-  labs(title="Polar Plot: National Average")
+Over the last 15 years, gas has typically been cheapest in **`r cheapest$month_name`**
+(`r percent(cheapest$typical, accuracy = 0.1)` vs. the year's average) and most expensive in
+**`r priciest$month_name`** (`r percent(priciest$typical, accuracy = 0.1)`). Prices usually climb in spring as
+refiners switch to summer-blend gasoline and driving season starts, then ease into winter.
+
+## Year by year
+
+```{r yearly averages, fig.width=10, fig.height=4.5}
+yearly <- gas_weekly %>%
+  mutate(year = year(date)) %>%
+  group_by(year) %>%
+  summarise(avg_price = mean(price),
+            pres_party = names(which.max(table(pres_party))),   # party in office most of the year
+            .groups = "drop")
+
+yearly_plot <- ggplot(yearly, aes(x = year, y = avg_price, fill = pres_party,
+                                  text = paste0(year, ifelse(year == year(last_week), " (so far)", ""),
+                                                ": ", dollars(avg_price)))) +
+  geom_col() +
+  scale_fill_manual(values = party_colors) +
+  scale_y_continuous(labels = dollar) +
+  scale_x_continuous(breaks = seq(1993, year(last_week), by = 2)) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Average price by year (bar color = president's party for most of the year)",
+       x = "", y = "Dollars per gallon")
+
+ggplotly(yearly_plot, tooltip = "text")
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
